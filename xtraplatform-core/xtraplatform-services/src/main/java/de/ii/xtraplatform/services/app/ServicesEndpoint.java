@@ -156,9 +156,9 @@ public class ServicesEndpoint implements Endpoint {
     List<MediaType> acceptableMediaTypes = containerRequestContext.getAcceptableMediaTypes();
     Optional<MediaType> negotiatedType = Optional.empty();
     for (MediaType type : acceptableMediaTypes) {
-      negotiatedType = supportedMediaTypes.stream().filter(type2 -> type2.isCompatible(type)).findFirst();
-      if (negotiatedType.isPresent())
-        break;
+      negotiatedType =
+          supportedMediaTypes.stream().filter(type2 -> type2.isCompatible(type)).findFirst();
+      if (negotiatedType.isPresent()) break;
     }
 
     MediaType mediaType =
@@ -166,15 +166,18 @@ public class ServicesEndpoint implements Endpoint {
             ? MediaType.APPLICATION_JSON_TYPE
             : Objects.equals(f, "html")
                 ? MediaType.TEXT_HTML_TYPE
-                : negotiatedType.orElseGet(() ->
-                    Objects.nonNull(containerRequestContext.getMediaType())
-                        && serviceListingProviders
-                        .containsKey(containerRequestContext.getMediaType())
-                        ? containerRequestContext.getMediaType()
-                        : containerRequestContext.getHeaderString("user-agent").toLowerCase()
-                            .contains("google-site-verification")
-                            ? MediaType.TEXT_HTML_TYPE
-                            : MediaType.APPLICATION_JSON_TYPE);
+                : negotiatedType.orElseGet(
+                    () ->
+                        Objects.nonNull(containerRequestContext.getMediaType())
+                                && serviceListingProviders.containsKey(
+                                    containerRequestContext.getMediaType())
+                            ? containerRequestContext.getMediaType()
+                            : containerRequestContext
+                                    .getHeaderString("user-agent")
+                                    .toLowerCase()
+                                    .contains("google-site-verification")
+                                ? MediaType.TEXT_HTML_TYPE
+                                : MediaType.APPLICATION_JSON_TYPE);
 
     if (serviceListingProviders.containsKey(mediaType)) {
       Response serviceListing =
