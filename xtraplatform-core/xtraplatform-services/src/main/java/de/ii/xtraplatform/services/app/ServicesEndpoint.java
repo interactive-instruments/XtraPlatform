@@ -7,6 +7,7 @@
  */
 package de.ii.xtraplatform.services.app;
 
+import akka.http.scaladsl.model.headers.LinkParams.type;
 import de.ii.xtraplatform.dropwizard.domain.Dropwizard;
 import de.ii.xtraplatform.dropwizard.domain.Endpoint;
 import de.ii.xtraplatform.dropwizard.domain.MediaTypeCharset;
@@ -26,6 +27,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 import javax.ws.rs.GET;
 import javax.ws.rs.NotFoundException;
@@ -115,9 +117,11 @@ public class ServicesEndpoint implements Endpoint {
   public synchronized void onServiceListingProviderArrival(
       ServiceReference<ServiceListingProvider> ref) {
     ServiceListingProvider serviceListingProvider = bundleContext.getService(ref);
-    MediaType type = serviceListingProvider.getMediaType();
-    if (serviceListingProvider != null && type != null) {
-      serviceListingProviders.put(type, serviceListingProvider);
+    if (serviceListingProvider != null) {
+      MediaType type = serviceListingProvider.getMediaType();
+      if (type != null) {
+        serviceListingProviders.put(type, serviceListingProvider);
+      }
     }
   }
 
@@ -148,25 +152,29 @@ public class ServicesEndpoint implements Endpoint {
             .filter(serviceData -> !serviceData.hasError())
             .collect(Collectors.toList());
 
+    Set<MediaType> supportedMediaTypes = serviceListingProviders.keySet();
+    List<MediaType> acceptableMediaTypes = containerRequestContext.getAcceptableMediaTypes();
+    Optional<MediaType> negotiatedType = Optional.empty();
+    for (MediaType type : acceptableMediaTypes) {
+      negotiatedType = supportedMediaTypes.stream().filter(type2 -> type2.isCompatible(type)).findFirst();
+      if (negotiatedType.isPresent())
+        break;
+    }
+
     MediaType mediaType =
         Objects.equals(f, "json")
             ? MediaType.APPLICATION_JSON_TYPE
             : Objects.equals(f, "html")
                 ? MediaType.TEXT_HTML_TYPE
-                : Objects.nonNull(containerRequestContext.getMediaType())
-                    ? containerRequestContext.getMediaType()
-                    : (containerRequestContext.getAcceptableMediaTypes().size() > 0
-                            && !containerRequestContext
-                                .getAcceptableMediaTypes()
-                                .get(0)
-                                .equals(MediaType.WILDCARD_TYPE))
-                        ? containerRequestContext.getAcceptableMediaTypes().get(0)
-                        : containerRequestContext
-                                .getHeaderString("user-agent")
-                                .toLowerCase()
-                                .contains("google-site-verification")
+                : negotiatedType.orElseGet(() ->
+                    Objects.nonNull(containerRequestContext.getMediaType())
+                        && serviceListingProviders
+                        .containsKey(containerRequestContext.getMediaType())
+                        ? containerRequestContext.getMediaType()
+                        : containerRequestContext.getHeaderString("user-agent").toLowerCase()
+                            .contains("google-site-verification")
                             ? MediaType.TEXT_HTML_TYPE
-                            : MediaType.APPLICATION_JSON_TYPE;
+                            : MediaType.APPLICATION_JSON_TYPE);
 
     if (serviceListingProviders.containsKey(mediaType)) {
       Response serviceListing =
